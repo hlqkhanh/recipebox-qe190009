@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function canonicalId(data) {
+      return data.userId + '__' + data.name.trim().lower().toUtf8().toHexString();
+    }
+    function validRecipe(data, recipeId) {
+      return data.keys().hasAll(['id', 'userId', 'name', 'category', 'difficulty', 'cookTime', 'favorite', 'createdAt'])
+        && data.id is string && data.id == recipeId
+        && data.userId is string && data.userId == request.auth.uid
+        && data.name is string && data.name.trim().size() > 0 && data.name.size() <= 80
+        && data.category in ['Breakfast', 'Lunch', 'Dinner', 'Dessert']
+        && data.difficulty in ['Easy', 'Medium', 'Hard']
+        && data.cookTime is int && data.cookTime >= 1 && data.cookTime <= 600
+        && (!('servings' in data) || (data.servings is int && data.servings >= 1 && data.servings <= 20))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 300))
+        && data.favorite is bool && data.createdAt is timestamp
+        && recipeId == canonicalId(data);
+    }
+    match /recipes/{recipeId} {
+      // A transaction may check its own not-yet-existing canonical document.
+      allow get: if signedIn() && (
+        (exists(/databases/$(database)/documents/recipes/$(recipeId)) && resource.data.userId == request.auth.uid)
+        || (!exists(/databases/$(database)/documents/recipes/$(recipeId))
+          && recipeId.matches('^' + request.auth.uid + '__[0-9A-F]+$'))
+      );
+      allow list: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn() && validRecipe(request.resource.data, recipeId);
+      allow update: if signedIn() && resource.data.userId == request.auth.uid
+        && validRecipe(request.resource.data, recipeId)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

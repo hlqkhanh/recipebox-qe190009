@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": { "test:rules": "firebase emulators:exec --project demo-recipebox --only firestore \"node --test rules.test.mjs\" --config ../firebase.json" },
+  "devDependencies": { "firebase-tools": "latest", "@firebase/rules-unit-testing": "latest", "firebase": "latest" }
+}
